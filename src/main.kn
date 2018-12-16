@@ -1,4 +1,5 @@
 const debug: bool :: false
+const version: []char :: "beta 1.01"
 const listFilePathDefault: []char :: "Untitled.mch.json"
 const settingFilePath: []char :: "setting.mchs.json"
 const btnHeight: int :: 23
@@ -56,12 +57,12 @@ func main()
 	do headListInit()
 	
 	do loadSettingFile(@settingFilePath)
+	do dbg@print(@listFilePath)
 	do @timerConectCooltime :: 0
 	while(wnd@act())
 		do lib@sleep(100)
 		do @timerConectCooltime :+ 1
 	end while
-	do saveSettingFile(@settingFilePath)
 	
 	func headListInit()
 		do @dataList.listHead.add("")
@@ -103,8 +104,8 @@ func main()
 				do f.writeStr("uuid:\{@headList.getOffset(0).uuid}\n\n")
 				do @headList.next()
 			end while
-			
-			do f.fin()
+		case %about
+			do wnd@msgBox(@wndMain, "Unlinked Head\nVersion \{@version}", " info ", %info, %ok)
 		end switch
 	end func
 	func pushHeadlistAdd(btn: wnd@Btn)
@@ -165,7 +166,6 @@ func main()
 			do @headListCursor :: newCursor
 			do loadHead()
 			do showHeadDataCtrl(true)
-			;do applyListName()
 		end if
 	end func
 	func pushGenByName(btn: wnd@Btn)
@@ -231,16 +231,19 @@ func main()
 		end if
 	end func
 	func closeWnd(wnd: wnd@WndBase): bool
+		var res: bool :: true
 		if(!@fileSaved)
 			var result: wnd@MsgBoxResult :: wnd@msgBox(@wndMain, "変更を破棄しますか？", "未保存のファイル", %warn, %okCancel)
 			switch(result)
 			case %ok
-				ret true
 			case %cancel
-				ret false
+				do res :: false
 			end switch
 		end if
-		ret true
+		if(res = true)
+			do saveSettingFile(@settingFilePath)
+		end if
+		ret res
 	end func
 	;イベントハンドラここまで
 	func flash()
@@ -290,8 +293,9 @@ func main()
 		var json: \json@JsonObject :: #\json@JsonObject
 		var jsonVer: \json@JsonString :: #\json@JsonString
 		var jsonListPath: \json@JsonString :: #\json@JsonString
+		var filePath: []char :: file@exeDir() ~ path
 		var versionStr: []char
-		var f: file@Writer :: file@makeWriter(path, false)
+		var fileWriter: file@Writer :: file@makeWriter(filePath, false)
 		switch(@mcVersion)
 		case %v1_12
 			do versionStr :: "1.12"
@@ -305,19 +309,19 @@ func main()
 		do jsonListPath.setValue(@listFilePath)
 		do json.add("MCVersion", jsonVer)
 		do json.add("last", jsonListPath)
-		do f.writeStr(json.dump())
-		do f.fin()
+		do fileWriter.writeStr(json.dump())
 	end func
 	func loadSettingFile(path: []char): bool
 		var json: \json@Json :: #\json@Json
 		var jsonVer: \json@Json :: #\json@Json
 		var jsonListPath: \json@Json :: #\json@Json
+		var filePath: []char :: file@exeDir() ~ path
+		do dbg@print(filePath)
 		try
-			
 			if(!file@exist(path))
 				throw 2
 			end if
-			do json :: \json@makeJsonF(path)
+			do json :: \json@makeJsonF(filePath)
 			do jsonVer :: json.at("MCVersion")
 			do jsonListPath :: json.at("last")
 			if(jsonVer.type() = %jstr & jsonListPath.type() = %jstr)
