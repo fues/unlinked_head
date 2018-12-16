@@ -1,0 +1,89 @@
+{*****************************************
+	base64エンコーダー・デコーダー
+******************************************}
+;例外 デコード
++const base64UndefinedCharacter: int :: 0x00008800 {base64文字列に定義されていない文字が含まれる}
++const base64IncorrectLength: int :: 0x00008801 {base64文字列の文字数が4の倍数でない}
+;例外 エンコード
++const base64UnconvertibleCharacter: int :: 0x00008808 {エンコード対象文字列が2バイト文字}
+;定数
+const pand: bit8 :: 0xFFb8
+const encTab: []char :: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+;デコード
+func decTab(chara: char): bit8
+	if(chara >= '0' & chara <= '9')
+		ret(chara $ int - 0x30 + 52) $ bit8
+	elif(chara >= 'A' & chara <= 'Z')
+		ret(chara $ int - 0x41) $ bit8
+	elif(chara >= 'a' & chara <= 'z')
+		ret(chara $ int - 0x61 + 26) $ bit8
+	elif(chara = '+')
+		ret 62b8
+	elif(chara = '/')
+		ret 63b8
+	elif(chara = '=')
+		ret @pand
+	else
+		throw @base64UndefinedCharacter
+	end if
+end func
++func dec(base64: []char): []char
+	var txt: []char :: ""
+	var input: []char :: ""
+	var bin8: []bit8 :: #[0]bit8
+	if(^base64 % 4 <> 0)
+		throw @base64IncorrectLength
+		ret ""
+	end if
+	for i(0, ^base64 - 1, 4)
+		var bin6: []bit8 :: #[4]bit8
+		for j(0, 3)
+			do bin6[j] :: @decTab(base64[i + j])
+		end for
+		;kuinはUTF-16なので1つ目の8bitはascii、2つ目の8bitは0を詰める
+		do txt :~ [[(bin6[0].shl(2)).or(bin6[1].shr(4)), 0x00b8] $< char]
+		if(bin6[2] <> @pand)
+			do txt :~ [[(bin6[1].shl(4)).or(bin6[2].shr(2)), 0x00b8] $< char]
+		end if
+		if(bin6[3] <> @pand)
+			do txt :~ [[(bin6[2].shl(6)).or(bin6[3].shr(0)), 0x00b8] $< char]
+		end if
+	end for
+	ret txt
+end func
+;エンコード
++func enc(txt: []char): []char
+	var bin8: []bit8 :: #[0]bit8
+	var bin6: []bit8 :: #[0]bit8
+	var base64: []char :: ""
+	var bin6len: int
+	for i(0, ^txt - 1)
+		;asciiに変換する。UTF-16の最初の8bitだけ抜き取る
+		var tmp: []bit8 :: txt[i] $> []bit8
+		if(tmp[1] <> 0x00b8)
+			throw @base64UnconvertibleCharacter
+			ret ""
+		end if
+		do bin8 :~ [tmp[0]]
+	end for
+	do bin6len :: ^bin8 - 1
+	for i(0, bin6len, 3)
+		do base64 :~ [@encTab[((bin8[i + 0].shr(2)).and(0x3Fb8)) $ int]]
+		if(bin6len < i + 1)
+			;3つのうち1つだけ埋まってる場合
+			do base64 :~ [@encTab[(((bin8[i + 0].shl(4)).or(0b8)).and(0x3Fb8)) $ int]]
+			do base64 :~ "=="
+			break i
+		end if
+		do base64 :~ [@encTab[(((bin8[i + 0].shl(4)).or(bin8[i + 1].shr(4))).and(0x3Fb8)) $ int]]
+		if(bin6len < i + 2)
+			;3つのうち2つだけ埋まってる場合
+			do base64 :~ [@encTab[(((bin8[i + 1].shl(2)).or(0b8)).and(0x3Fb8)) $ int]]
+			do base64 :~ "="
+			break i
+		end if
+		do base64 :~ [@encTab[(((bin8[i + 1].shl(2)).or(bin8[i + 2].shr(6))).and(0x3Fb8)) $ int]]
+		do base64 :~ [@encTab[((bin8[i + 2]).and(0x3Fb8)) $ int]]
+	end for
+	ret base64
+end func

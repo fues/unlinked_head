@@ -1,0 +1,762 @@
+const debug: bool :: false
+const listFilePathDefault: []char :: "Untitled.mch.json"
+const settingFilePath: []char :: "setting.mchs.json"
+const btnHeight: int :: 23
+const txtHeight: int :: 19
+const infoDoInput: []char :: "入力してください"
+const infoConvert: []char :: "変換"
+const infoConverting: []char :: "変換中"
+
+var wndMain: wnd@Wnd
+var menu: @Menu
+var dataList: @DataList
+var dataGenName: @DataGen
+var dataGenCmd: @DataGen
+var dataEdit: @DataEdit
+var head: @HeadData
+var headList: list<@HeadData>
+
+var fileSaved: bool :: true
+var timerConectCooltime: int
+var headListCursor: int
+var listFilePath: []char :: @listFilePathDefault
+var mcVersion: @McVersion :: %v1_13
+
+func main()
+	do @wndMain :: wnd@makeWnd(null, %fix, 555, 420, @listFilePath)
+	do @menu :: #@Menu
+	do @dataList :: #@DataList
+	do @dataGenName :: #@DataGen
+	do @dataGenCmd :: #@DataGen
+	do @dataEdit :: #@DataEdit
+	
+	do @headList :: #list<@HeadData>
+	do @head :: #@HeadData
+	
+	do @dataList.init("頭リスト", 10, 10, 235, 380)
+	do @dataGenName.init("minecraftIDから生成", 255, 10, 140, 90)
+	do @dataGenCmd.init("F3+I コマンドから生成", 405, 10, 140, 90)
+	do @dataEdit.init("データ編集", 255, 110, 290, 280)
+	do @menu.init()
+	do @wndMain.setMenu(@menu.menu)
+	;イベントハンドラ定義
+	do @wndMain.onClose :: closeWnd
+	do @wndMain.onPushMenu :: pushMenu
+	do wnd@setOnKeyPress(pressKeyWnd)
+	do @dataGenName.btn.onPush :: pushGenByName
+	do @dataGenCmd.btn.onPush :: pushGenByCmd
+	do @dataEdit.setEditUpdateHnadler(editDataHandler)
+	do @dataEdit.btnGenCmd.onPush :: pushMakeGiveCmd
+	do @dataEdit.btnGenUUID.onPush :: pushGenUUID
+	do @dataList.btnMake.onPush :: pushHeadlistAdd
+	do @dataList.btnCopy.onPush :: pushHeadlistCopy
+	do @dataList.btnDel.onPush :: pushHeadListDel
+	do @dataList.listHead.onSel :: selectHeadList
+	
+	do headListInit()
+	
+	do loadSettingFile(@settingFilePath)
+	do @timerConectCooltime :: 0
+	while(wnd@act())
+		do lib@sleep(100)
+		do @timerConectCooltime :+ 1
+	end while
+	do saveSettingFile(@settingFilePath)
+	
+	func headListInit()
+		do @dataList.listHead.add("")
+		do @dataList.listHead.setSel(0)
+		do @headListCursor :: 0
+		do @headList.add(@head)
+		do showHeadDataCtrl(true)
+		do applyListName()
+	end func
+	;イベントハンドラ
+	func pressKeyWnd(key: wnd@Key, sc: wnd@ShiftCtrl): bool
+		if(key = %s)
+			if(sc = (%ctrl $ wnd@ShiftCtrl).or(%shift $ wnd@ShiftCtrl))
+				do fileSaveAs()
+				ret true
+			elif(sc = %ctrl)
+				do fileSave()
+				ret true
+			end if
+		end if
+		ret false
+	end func
+	func pushMenu(wnd: wnd@WndBase, id: int)
+		switch(id $ @MenuId)
+		case %newFile
+			do flash()
+		case %save
+			do fileSave()
+		case %saveAs
+			do fileSaveAs()
+		case %open
+			do loadListFileDialog()
+		case %dbug
+			var f: file@Writer
+			do f :: file@makeWriter("debug.txt", false)
+			do @headList.head()
+			while(!@headList.term(), skip)
+				do f.writeStr("name:\{@headList.getOffset(0).name}\n")
+				do f.writeStr("uuid:\{@headList.getOffset(0).uuid}\n\n")
+				do @headList.next()
+			end while
+			
+			do f.fin()
+		end switch
+	end func
+	func pushHeadlistAdd(btn: wnd@Btn)
+		do @headListCursor :+ 1
+		if(@dataList.listHead.len() = @headListCursor)
+			do @dataList.listHead.add("")
+			do @headList.add(#@HeadData)
+		else
+			do @dataList.listHead.ins(@headListCursor, "")
+			do @headList.moveOffset(@headListCursor)
+			do @headList.ins(#@HeadData)
+		end if
+		do @dataList.listHead.setSel(@headListCursor)
+		do loadHead()
+		do showHeadDataCtrl(true)
+		do applyListName()
+	end func
+	func pushHeadlistCopy(btn: wnd@Btn)
+		do @headListCursor :+ 1
+		if(@dataList.listHead.len() = @headListCursor)
+			do @dataList.listHead.add("")
+			do @headList.add(#@HeadData)
+		else
+			do @dataList.listHead.ins(@headListCursor, "")
+			do @headList.moveOffset(@headListCursor)
+			do @headList.ins(#@HeadData)
+		end if
+		do @dataList.listHead.setSel(@headListCursor)
+		do loadHead()
+		do @headList.head()
+		do @head.copy(@headList.getOffset(@headListCursor - 1))
+		do showHeadDataCtrl(true)
+		do applyListName()
+	end func
+	func pushHeadListDel(btn: wnd@Btn)
+		if(@headListCursor = 0 & @dataList.listHead.len() = 1)
+			do @head.clear()
+			do applyListName()
+		elif(@headListCursor = 0)
+			do @headList.head()
+			do @headList.del()
+			do @dataList.listHead.del(@headListCursor)
+			do @dataList.listHead.setSel(@headListCursor)
+		else
+			do @headList.head()
+			do @headList.moveOffset(@headListCursor)
+			do @headList.del()
+			do @dataList.listHead.del(@headListCursor)
+			do @headListCursor :- 1
+			do @dataList.listHead.setSel(@headListCursor)
+		end if
+		do loadHead()
+		do showHeadDataCtrl(true)
+	end func
+	func selectHeadList(li: wnd@List)
+		var newCursor: int :: @dataList.listHead.getSel()
+		if(newCursor <> @headListCursor)
+			do @headListCursor :: newCursor
+			do loadHead()
+			do showHeadDataCtrl(true)
+			;do applyListName()
+		end if
+	end func
+	func pushGenByName(btn: wnd@Btn)
+		var text: []char :: @dataGenName.edit.getText()
+		do btn.setEnabled(false)
+		do btn.setText(@infoConverting)
+		try
+			if(text = "")
+				throw 0
+			end if
+			var pl: @PlayerData :: @makePlayerData(text)
+			do @head.import(pl)
+			do showHeadDataCtrl(false)
+			
+			do fileSaved(false)
+		catch 0
+			do wnd@msgBox(@wndMain, "minecraft IDを入力してください", "eroor", %info, %ok)
+		catch
+			do wnd@msgBox(@wndMain, "不正なデータです。\n時間を置くと改善される可能性があります", "eroor", %info, %ok)
+		end try
+		do btn.setEnabled(true)
+		do btn.setText(@infoConvert)
+	end func
+	func pushGenByCmd(btn: wnd@Btn)
+		var text: []char :: @dataGenCmd.edit.getText()
+		do btn.setEnabled(false)
+		do btn.setText(@infoConverting)
+		try
+			if(text = "")
+				throw 0
+			end if
+			var pl: @PlayerData :: @makePlayerDataByCmd(text, @mcVersion)
+			do @head.import(pl)
+			do showHeadDataCtrl(false)
+			
+			do fileSaved(false)
+		catch 0
+			do wnd@msgBox(@wndMain, "設置された頭を見ながらF3+Iを押してコピーされたデータを貼り付けてください", " eroor ", %info, %ok)
+		catch
+			do wnd@msgBox(@wndMain, "不正なデータ\nminecraftのバージョンを確認してください", "eroor", %info, %ok)
+		end try
+		do btn.setEnabled(true)
+		do btn.setText(@infoConvert)
+	end func
+	func editDataHandler(edit: wnd@Edit)
+		do applyEditData()
+		do applyListName()
+		
+		do fileSaved(false)
+	end func
+	func pushGenUUID(btn: wnd@Btn)
+		do @head.generateUUID()
+		do showHeadDataCtrl(false)
+	end func
+	func pushMakeGiveCmd(btn: wnd@Btn)
+		var res: bool
+		var cmd: []char
+		do cmd :: @head.makeGiveCmd(@mcVersion, &res)
+		if(res)
+			do wnd@setClipboardStr(cmd)
+		else
+			do wnd@msgBox(@wndMain, "データが不完全か不正です。", "err", %info, %ok)
+		end if
+	end func
+	func closeWnd(wnd: wnd@WndBase): bool
+		if(!@fileSaved)
+			var result: wnd@MsgBoxResult :: wnd@msgBox(@wndMain, "変更を破棄しますか？", "未保存のファイル", %warn, %okCancel)
+			switch(result)
+			case %ok
+				ret true
+			case %cancel
+				ret false
+			end switch
+		end if
+		ret true
+	end func
+	;イベントハンドラここまで
+	func flash()
+		;初期化
+		do @listFilePath :: @listFilePathDefault
+		do @headList :: #list<@HeadData>
+		do @head :: #@HeadData
+		do @dataList.listHead.clear()
+		do headListInit()
+		do fileSaved(true)
+	end func
+	func showHeadDataCtrl(foace: bool)
+		;変更をeditに反映するときonCangeが呼ばれて反映できないので一時的にedit更新ハンドラに何もしない関数を設定する
+		var editfunc: func<(wnd@WndBase)> :: @dataEdit.editName.onChange
+		do @dataEdit.setEditUpdateHnadler(none)
+		
+		if(^@head.name <> 0 | foace)
+			do @dataEdit.editName.setText(@head.name)
+		end if
+		if(^@head.comment <> 0 | foace)
+			do @dataEdit.editComment.setText(@head.comment)
+		end if
+		do @dataEdit.editUUID.setText(@head.uuid)
+		do @dataEdit.editURL.setText(@head.skinURL)
+		
+		;ハンドラを戻す
+		do @dataEdit.setEditUpdateHnadler(editfunc)
+		func none(edit: wnd@Edit)
+		end func
+	end func
+	func applyEditData()
+		do @head.name :: @dataEdit.editName.getText()
+		do @head.comment :: @dataEdit.editComment.getText()
+		do @head.uuid :: @dataEdit.editUUID.getText()
+		do @head.skinURL :: @dataEdit.editURL.getText()
+		
+		do @dataList.listHead.setText(@dataList.listHead.getSel(), @dataEdit.editName.getText())
+	end func
+	func loadHead()
+		do @headList.head()
+		do @head :: @headList.getOffset(@headListCursor)
+	end func
+	func applyListName()
+		do @dataList.listHead.setText(@headListCursor, @head.name)
+	end func
+	func saveSettingFile(path: []char)
+		var json: \json@JsonObject :: #\json@JsonObject
+		var jsonVer: \json@JsonString :: #\json@JsonString
+		var jsonListPath: \json@JsonString :: #\json@JsonString
+		var versionStr: []char
+		var f: file@Writer :: file@makeWriter(path, false)
+		switch(@mcVersion)
+		case %v1_12
+			do versionStr :: "1.12"
+		case %v1_13
+			do versionStr :: "1.13"
+		default
+			do dbg@print("save:versionERR\n")
+			ret
+		end switch
+		do jsonVer.setValue(versionStr)
+		do jsonListPath.setValue(@listFilePath)
+		do json.add("MCVersion", jsonVer)
+		do json.add("last", jsonListPath)
+		do f.writeStr(json.dump())
+		do f.fin()
+	end func
+	func loadSettingFile(path: []char): bool
+		var json: \json@Json :: #\json@Json
+		var jsonVer: \json@Json :: #\json@Json
+		var jsonListPath: \json@Json :: #\json@Json
+		try
+			
+			if(!file@exist(path))
+				throw 2
+			end if
+			do json :: \json@makeJsonF(path)
+			do jsonVer :: json.at("MCVersion")
+			do jsonListPath :: json.at("last")
+			if(jsonVer.type() = %jstr & jsonListPath.type() = %jstr)
+				var listFile: []char :: ""
+				if(jsonVer.toStr() = "1.13")
+					do @mcVersion :: %v1_13
+				else
+					throw 0
+				end if
+				do listFile :: jsonListPath.toStr()
+				if(file@exist(listFile))
+					do @listFilePath :: listFile
+					do loadListFile(listFile)
+				else
+					do @listFilePath :: @listFilePathDefault
+					throw 1
+				end if
+				ret true
+			end if
+		catch 0
+			do dbg@print("load:versionERR\n")
+		catch 1
+			do dbg@print("load:filePathERR\n")
+		catch 2
+			do dbg@print("load:notSettingFile\n")
+		catch excpt@fileReadFailed
+			do dbg@print("load:fileOpenERR\n")
+		catch
+			do dbg@print("load:otherERR\n")
+		end try
+		ret false
+	end func
+	func saveListFile(path: []char)
+		var jsonRoot: \json@JsonObject :: #\json@JsonObject
+		var jsonHeadList: \json@JsonArray :: #\json@JsonArray
+		var f: file@Writer :: file@makeWriter(path, false)
+		do @headList.head()
+		while(!@headList.term(), skip)
+			do jsonHeadList.add(@headList.get().makeJsonObj())
+			do @headList.next()
+		end while
+		do jsonRoot.add("heads", jsonHeadList)
+		do f.writeStr(jsonRoot.dump())
+		do @listFilePath :: path
+		do fileSaved(true)
+	end func
+	func loadListFile(path: []char): bool
+		var json: \json@Json :: #\json@Json
+		var jsonHeads: \json@Json :: #\json@Json
+		
+		try
+			do json :: \json@makeJsonF(path)
+			do jsonHeads :: json.at("heads")
+			if(jsonHeads.type() = %jary)
+				var jsonHeadsAry: \json@JsonArray :: jsonHeads $ \json@JsonArray
+				var listlen: int :: jsonHeadsAry.len()
+				do flash()
+				if(listlen < 1)
+					throw 0
+				end if
+				do @head.loadJsonObj(jsonHeads.at("\{0}"))
+				do showHeadDataCtrl(true)
+				do applyListName()
+				for i(1, listlen - 1)
+					var head: @HeadData :: #@HeadData
+					var jsonHead: \json@Json :: #\json@Json
+					do jsonHead :: jsonHeads.at("\{i}")
+					do head.loadJsonObj(jsonHead)
+					do @headList.add(head)
+					do @dataList.listHead.add(head.name)
+				end for
+				do @wndMain.setText(file@fileName(@listFilePath))
+			else
+				throw 0
+			end if
+		catch
+			ret false
+		end try
+		do @listFilePath :: path
+		do fileSaved(true)
+		ret true
+	end func
+	func loadListFileDialog()
+		var filePath: []char
+		do filePath :: wnd@openFileDialog(@wndMain, ["設定jsonファイル(*.mch.json)", "*.mch.json"], 0)
+		if(filePath <>& null)
+			do loadListFile(filePath)
+		end if
+	end func
+	func saveListFileDialog()
+		var filePath: []char
+		do filePath :: wnd@saveFileDialog(@wndMain, ["設定jsonファイル(*.mch.json)", "*.mch.json"], 0, "mch.json")
+		if(filePath <>& null)
+			do saveListFile(filePath)
+		end if
+	end func
+	func fileSaved(en: bool)
+		if(en)
+			do @fileSaved :: true
+			do @wndMain.setText(file@fileName(@listFilePath))
+		else
+			do @fileSaved :: false
+			do @wndMain.setText("* " ~ file@fileName(@listFilePath))
+		end if
+	end func
+	func fileSave()
+		if(@listFilePath = @listFilePathDefault)
+			do saveListFileDialog()
+		else
+			do saveListFile(@listFilePath)
+		end if
+	end func
+	func fileSaveAs()
+		do saveListFileDialog()
+	end func
+end func
+enum MenuId
+	newFile :: 1
+	open
+	save
+	saveAs
+	
+	about
+	dbug
+end enum
+class Menu()
+	+var menu: wnd@Menu
+	var file: wnd@Popup
+	var help: wnd@Popup
+	+func init()
+		do me.menu :: wnd@makeMenu()
+		do me.file :: wnd@makePopup()
+		do me.help :: wnd@makePopup()
+		do me.file.add(%newFile $ @MenuId $ int, "新規作成")
+		do me.file.add(%open $ @MenuId $ int, "開く")
+		do me.file.addLine()
+		do me.file.add(%save $ @MenuId $ int, "保存 (Ctrl+S)")
+		do me.file.add(%saveAs $ @MenuId $ int, "名前を付けて保存 (Shift+Ctrl+S)")
+		do me.help.add(%about $ @MenuId $ int, "about")
+		if(@debug)
+			do me.help.add(%dbug $ @MenuId $ int, "デバッグ")
+		end if
+		do me.menu.addPopup("ファイル", me.file)
+		do me.menu.addLine()
+		do me.menu.addPopup("ヘルプ", me.help)
+	end func
+end class
+class Group()
+	+var group: wnd@Group
+	+func init(name: []char, x: int, y: int, dx: int, dy: int)
+	end func
+end class
+class DataList(@Group)
+	+var listHead: wnd@List
+	+var btnMake: wnd@Btn
+	+var btnDel: wnd@Btn
+	+var btnCopy: wnd@Btn
+	+*func init(name: []char, x: int, y: int, dx: int, dy: int)
+		do me.group :: wnd@makeGroup(@wndMain, x, y, dx, dy, %fix, %fix, name)
+		do me.btnMake :: wnd@makeBtn(me.group, 85, 20, 40, @btnHeight, %fix, %fix, "新規")
+		do me.btnDel :: wnd@makeBtn(me.group, 135, 20, 40, @btnHeight, %fix, %fix, "削除")
+		do me.btnCopy :: wnd@makeBtn(me.group, 185, 20, 40, @btnHeight, %fix, %fix, "複製")
+		do me.listHead :: wnd@makeList(me.group, 10, 50, 215, 300, %fix, %fix)
+	end func
+end class
+class DataGen(@Group)
+	+var edit: wnd@Edit
+	+var btn: wnd@Btn
+	+*func init(name: []char, x: int, y: int, dx: int, dy: int)
+		do me.group :: wnd@makeGroup(@wndMain, x, y, dx, dy, %move, %scale, name)
+		do me.edit :: wnd@makeEdit(me.group, 10, 20, 120, @btnHeight, %fix, %fix)
+		do me.btn :: wnd@makeBtn(me.group, 60, 50, 70, @btnHeight, %fix, %fix, "生成")
+	end func
+end class
+class DataEdit(@Group)
+	+var editName: wnd@Edit
+	+var editUUID: wnd@Edit
+	+var editURL: wnd@Edit
+	+var editComment: wnd@Edit
+	+var btnGenUUID: wnd@Btn
+	+var btnGenCmd: wnd@Btn
+	*func ctor()
+	end func
+	+*func init(name: []char, x: int, y: int, dx: int, dy: int)
+		do me.group :: wnd@makeGroup(@wndMain, x, y, dx, dy, %move, %scale, name)
+		do me.setEdit("名前", 10, 20, &me.editName)
+		do me.setEditBtn("UUID", "UUID再生成", 10, 70, &me.editUUID, &me.btnGenUUID)
+		do me.setEdit("URL", 10, 130, &me.editURL)
+		do me.setEdit("コメント", 10, 180, &me.editComment)
+		do me.btnGenCmd :: wnd@makeBtn(me.group, 110, 240, 170, 30, %fix, %fix, "コマンドをクリップボードにコピー")
+	end func
+	+func clear()
+		do me.editName.setText("")
+		do me.editUUID.setText("")
+		do me.editURL.setText("")
+		do me.editComment.setText("")
+	end func
+	func setEdit(name: []char, x: int, y: int, edit: &wnd@Edit)
+		do wnd@makeLabel(me.group, x, y + 4, 180, @txtHeight, %fix, %fix, name)
+		do edit :: wnd@makeEdit(me.group, x + 10, y + 20, 260, @txtHeight, %fix, %fix)
+	end func
+	func setEditBtn(name: []char, btnText: []char, x: int, y: int, edit: &wnd@Edit, btn: &wnd@Btn)
+		do wnd@makeLabel(me.group, x, y + 5, 180, @txtHeight, %fix, %fix, name)
+		do btn :: wnd@makeBtn(me.group, x + 30, y, 90, @btnHeight, %fix, %fix, btnText)
+		do edit :: wnd@makeEdit(me.group, x + 10, y + 30, 260, @txtHeight, %fix, %fix)
+	end func
+	+func setEditUpdateHnadler(handler: func<(wnd@WndBase)>)
+		do me.editName.onChange :: handler
+		do me.editUUID.onChange :: handler
+		do me.editURL.onChange :: handler
+		do me.editComment.onChange :: handler
+	end func
+end class
+func filesave()
+end func
+func getJson(url: []char, suffix: []char): \json@Json
+	var jsonText: []char :: @getTextByURL(url ~ suffix)
+	;do dbg@print("\{jsonText}\n\n")
+	if(jsonText = "")
+		do dbg@print("!!!\n\n")
+	end if
+	try
+		ret \json@makeJsonT(jsonText)
+	catch
+		do wnd@msgBox(@wndMain, "不正なデータ", "eroor", %info, %ok)
+	end try
+end func
+func getTextByURL(url: []char): []char
+	var http: net@Http :: net@makeHttp(url, false, null)
+	;正常取得できるとhttpが開放されるのでバッファが必要
+	var text: []char
+	while(text =& null, skip)
+		do lib@sleep(100)
+		do text :: http.get()
+	end while
+	ret text
+end func
+
+enum McVersion
+	v1_13
+	v1_12
+end enum
+
+func makePlayerData(name: []char): @PlayerData
+	var pl: @PlayerData :: #@PlayerData
+	do pl.makeByName(name)
+	ret pl
+end func
+func makePlayerDataByCmd(cmd: []char, ver: @McVersion): @PlayerData
+	var pl: @PlayerData :: #@PlayerData
+	do pl.makeByCmd(cmd, ver)
+	ret pl
+end func
+class PlayerData()
+	+var skinURL: []char
+	+var userName: []char
+	+var userUUID: []char
+	*func ctor()
+		do me.skinURL :: ""
+		do me.userName :: ""
+		do me.userUUID :: ""
+	end func
+	+func makeByName(name: []char)
+		do me.userName :: name
+		do me.getUUIDbyName()
+		do me.getSkinURLbyUUID()
+	end func
+	+func makeByCmd(cmd: []char, ver: @McVersion)
+		var cmdJson: []char
+		var json: \json@Json
+		var jsonName: \json@Json
+		var jsonUUID: \json@Json
+		var jsonBase64: \json@Json
+		switch(ver)
+		case %v1_13
+			do cmdJson :: regex@makeRegex("^.*?{").replace(cmd, "{", false)
+			;普通は無いが末尾にオプションがついた場合
+			do cmdJson :: regex@makeRegex("}[^}] * $").replace(cmdJson, "}", false)
+			;力技でcmdJsonのタグに""をつける
+			do cmdJson :: regex@makeRegex("(Owner)\\s*:").replace(cmdJson, "\"$1\":", true)
+			do cmdJson :: regex@makeRegex("(Id)\\s*:").replace(cmdJson, "\"$1\":", true)
+			do cmdJson :: regex@makeRegex("(Properties)\\s*:").replace(cmdJson, "\"$1\":", true)
+			do cmdJson :: regex@makeRegex("(textures)\\s*:").replace(cmdJson, "\"$1\":", true)
+			do cmdJson :: regex@makeRegex("(Value)\\s*:").replace(cmdJson, "\"$1\":", true)
+			do cmdJson :: regex@makeRegex("(Name)\\s*:").replace(cmdJson, "\"$1\":", true)
+		end switch
+		;do dbg@print("\{cmdJson}\n")
+		do json :: \json@makeJsonT(cmdJson)
+		do jsonName :: json.at("Owner/Name")
+		do jsonUUID :: json.at("Owner/Id")
+		do jsonBase64 :: json.at("Owner/Properties/textures/0/Value")
+		if(jsonBase64.type() = %jstr)
+			do me.getURLbyBase64(jsonBase64.toStr())
+			if(jsonName.type() = %jstr & jsonUUID.type() = %jstr)
+				do me.userName :: jsonName.toStr()
+				do me.userUUID :: jsonUUID.toStr()
+			end if
+		end if
+		;コマンドの解析に失敗
+	end func
+	func getUUIDbyName()
+		var json: \json@Json
+		var jsonUUID: \json@Json
+		do json :: @getJson("https://api.mojang.com/users/profiles/minecraft/", me.userName)
+		do jsonUUID :: json.at("id")
+		do me.userUUID :: jsonUUID.toStr()
+	end func
+	func getSkinURLbyUUID()
+		var json: \json@Json
+		var jsonBase64: \json@Json
+		do json :: @getJson("https://sessionserver.mojang.com/session/minecraft/profile/", me.userUUID)
+		do jsonBase64 :: json.at("properties/0/value")
+		do me.getURLbyBase64(jsonBase64.toStr())
+	end func
+	func getURLbyBase64(base64: []char)
+		var json: \json@Json
+		var jsonURL: \json@Json
+		;do dbg@print("\{base64Json}\n\n")
+		do json :: \json@makeJsonT(\base64@dec(base64))
+		do jsonURL :: json.at("textures/SKIN/url")
+		do me.skinURL :: jsonURL.toStr()
+	end func
+end class
+func makeHeadData(playerData: @PlayerData): @HeadData
+	var head: @HeadData :: #@HeadData
+	do head.import(playerData)
+	ret head
+end func
+class HeadData()
+	+var skinURL: []char
+	+var uuid: []char
+	+var name: []char
+	+var comment: []char
+	*func ctor()
+		do me.skinURL :: ""
+		do me.uuid :: ""
+		do me.name :: ""
+		do me.comment :: ""
+	end func
+	+func clear()
+		do me.skinURL :: ""
+		do me.uuid :: ""
+		do me.name :: ""
+		do me.comment :: ""
+	end func
+	+func generateUUID()
+		do me.uuid :: lib@rndUuid()
+	end func
+	+func copy(head: @HeadData)
+		do me.skinURL :: head.skinURL
+		do me.uuid :: head.uuid
+		do me.name :: head.name
+		do me.comment :: head.comment
+	end func
+	+func show()
+		do dbg@print("[head]name:\{me.name}\n")
+		do dbg@print("[head]uuid:\{me.uuid}\n")
+		do dbg@print("[head]skinURL:\{me.skinURL}\n")
+		do dbg@print("[head]comment:\{me.comment}\n")
+	end func
+	+func import(playerData: @PlayerData)
+		do me.skinURL :: playerData.skinURL
+	end func
+	func makeBase64(res: &bool): []char
+		if(^(me.skinURL) = 0)
+			do res :: false
+			ret ""
+		else
+			do res :: true
+		end if
+		var jsonUrl: \json@JsonString :: #\json@JsonString
+		var jsonSkin: \json@JsonObject :: #\json@JsonObject
+		var jsonTex: \json@JsonObject :: #\json@JsonObject
+		var jsonRoot: \json@JsonObject :: #\json@JsonObject
+		do jsonUrl.setValue(me.skinURL)
+		do jsonSkin.add("url", jsonUrl)
+		do jsonTex.add("SKIN", jsonSkin)
+		do jsonRoot.add("textures", jsonTex)
+		ret \base64@enc(jsonRoot.dump())
+	end func
+	+func makeGiveCmd(ver: @McVersion, res: &bool): []char
+		var command: []char :: ""
+		var resBase64: bool :: true
+		if(^(me.uuid) = 0)
+			do res :: false
+			ret command
+		end if
+		var base64Json: []char :: me.makeBase64(&resBase64)
+		if(!resBase64)
+			do res :: false
+			ret command
+		end if
+		switch(ver)
+		case %v1_13
+			do command :~ "/give @p minecraft:player_head{"
+			if(^(me.name) <> 0)
+				do command :~ "display:{Name:\" {\\\"text\\\":\\\""
+				do command :~ me.name
+				do command :~ "\\\"}\"},"
+			end if
+			do command :~ "SkullOwner:{Id:\""
+			do command :~ me.uuid
+			do command :~ "\",Properties:{textures:[{Value:\""
+			do command :~ base64Json
+			do command :~ "\"}]}}} 1"
+		end switch
+		do res :: true
+		ret command
+	end func
+	+func makeJsonObj(): \json@JsonObject
+		var jsonRoot: \json@JsonObject :: #\json@JsonObject
+		var jsonName: \json@JsonString :: #\json@JsonString
+		var jsonURL: \json@JsonString :: #\json@JsonString
+		var jsonUUID: \json@JsonString :: #\json@JsonString
+		var jsonComment: \json@JsonString :: #\json@JsonString
+		do jsonName.setValue(me.name)
+		do jsonURL.setValue(me.skinURL)
+		do jsonUUID.setValue(me.uuid)
+		do jsonComment.setValue(me.comment)
+		do jsonRoot.add("name", jsonName)
+		do jsonRoot.add("skinURL", jsonURL)
+		do jsonRoot.add("uuid", jsonUUID)
+		do jsonRoot.add("comment", jsonComment)
+		ret jsonRoot
+	end func
+	+func loadJsonObj(json: \json@JsonObject)
+		do @jsonObjToString(json, "name", &me.name)
+		do @jsonObjToString(json, "skinURL", &me.skinURL)
+		do @jsonObjToString(json, "uuid", &me.uuid)
+		do @jsonObjToString(json, "comment", &me.comment)
+	end func
+end class
+func jsonObjToString(json: \json@Json, path: []char, string: &[]char): bool
+	var jsonStr: \json@Json :: #\json@Json
+	do jsonStr :: json.at(path)
+	if(jsonStr.type() = %jstr)
+		do string :: jsonStr.toStr()
+		ret true
+	else
+		ret false
+	end if
+end func
