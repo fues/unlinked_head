@@ -2,5 +2,9 @@
 <configuration>
 	<icon></icon>
 	<env>wnd</env>
-	<resources />
+	<resources>
+		<resource>base64.kn</resource>
+		<resource>json.kn</resource>
+		<resource>player.kn</resource>
+	</resources>
 </configuration>

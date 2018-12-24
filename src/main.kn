@@ -1,4 +1,3 @@
-const debug: bool :: false
 const version: []char :: "beta 1.01"
 const listFilePathDefault: []char :: "Untitled.mch.json"
 const settingFilePath: []char :: "setting.mchs.json"
@@ -14,14 +13,14 @@ var dataList: @DataList
 var dataGenName: @DataGen
 var dataGenCmd: @DataGen
 var dataEdit: @DataEdit
-var head: @HeadData
-var headList: list<@HeadData>
+var head: \player@HeadData
+var headList: list<\player@HeadData>
 
 var fileSaved: bool :: true
 var timerConectCooltime: int
 var headListCursor: int
 var listFilePath: []char :: @listFilePathDefault
-var mcVersion: @McVersion :: %v1_13
+var mcVersion: \player@McVersion :: %v1_13
 
 func main()
 	do @wndMain :: wnd@makeWnd(null, %fix, 555, 420, @listFilePath)
@@ -31,8 +30,8 @@ func main()
 	do @dataGenCmd :: #@DataGen
 	do @dataEdit :: #@DataEdit
 	
-	do @headList :: #list<@HeadData>
-	do @head :: #@HeadData
+	do @headList :: #list<\player@HeadData>
+	do @head :: #\player@HeadData
 	
 	do @dataList.init("頭リスト", 10, 10, 235, 380)
 	do @dataGenName.init("minecraftIDから生成", 255, 10, 140, 90)
@@ -112,11 +111,11 @@ func main()
 		do @headListCursor :+ 1
 		if(@dataList.listHead.len() = @headListCursor)
 			do @dataList.listHead.add("")
-			do @headList.add(#@HeadData)
+			do @headList.add(#\player@HeadData)
 		else
 			do @dataList.listHead.ins(@headListCursor, "")
 			do @headList.moveOffset(@headListCursor)
-			do @headList.ins(#@HeadData)
+			do @headList.ins(#\player@HeadData)
 		end if
 		do @dataList.listHead.setSel(@headListCursor)
 		do loadHead()
@@ -127,11 +126,11 @@ func main()
 		do @headListCursor :+ 1
 		if(@dataList.listHead.len() = @headListCursor)
 			do @dataList.listHead.add("")
-			do @headList.add(#@HeadData)
+			do @headList.add(#\player@HeadData)
 		else
 			do @dataList.listHead.ins(@headListCursor, "")
 			do @headList.moveOffset(@headListCursor)
-			do @headList.ins(#@HeadData)
+			do @headList.ins(#\player@HeadData)
 		end if
 		do @dataList.listHead.setSel(@headListCursor)
 		do loadHead()
@@ -176,7 +175,7 @@ func main()
 			if(text = "")
 				throw 0
 			end if
-			var pl: @PlayerData :: @makePlayerData(text)
+			var pl: \player@PlayerData :: \player@makePlayerData(text)
 			do @head.import(pl)
 			do showHeadDataCtrl(false)
 			
@@ -197,7 +196,7 @@ func main()
 			if(text = "")
 				throw 0
 			end if
-			var pl: @PlayerData :: @makePlayerDataByCmd(text, @mcVersion)
+			var pl: \player@PlayerData :: \player@makePlayerDataByCmd(text, @mcVersion)
 			do @head.import(pl)
 			do showHeadDataCtrl(false)
 			
@@ -249,8 +248,8 @@ func main()
 	func flash()
 		;初期化
 		do @listFilePath :: @listFilePathDefault
-		do @headList :: #list<@HeadData>
-		do @head :: #@HeadData
+		do @headList :: #list<\player@HeadData>
+		do @head :: #\player@HeadData
 		do @dataList.listHead.clear()
 		do headListInit()
 		do fileSaved(true)
@@ -386,7 +385,7 @@ func main()
 				do showHeadDataCtrl(true)
 				do applyListName()
 				for i(1, listlen - 1)
-					var head: @HeadData :: #@HeadData
+					var head: \player@HeadData :: #\player@HeadData
 					var jsonHead: \json@Json :: #\json@Json
 					do jsonHead :: jsonHeads.at("\{i}")
 					do head.loadJsonObj(jsonHead)
@@ -461,7 +460,7 @@ class Menu()
 		do me.file.add(%save $ @MenuId $ int, "保存 (Ctrl+S)")
 		do me.file.add(%saveAs $ @MenuId $ int, "名前を付けて保存 (Shift+Ctrl+S)")
 		do me.help.add(%about $ @MenuId $ int, "about")
-		if(@debug)
+		if(dbg)
 			do me.help.add(%dbug $ @MenuId $ int, "デバッグ")
 		end if
 		do me.menu.addPopup("ファイル", me.file)
@@ -535,232 +534,3 @@ class DataEdit(@Group)
 		do me.editComment.onChange :: handler
 	end func
 end class
-func filesave()
-end func
-func getJson(url: []char, suffix: []char): \json@Json
-	var jsonText: []char :: @getTextByURL(url ~ suffix)
-	;do dbg@print("\{jsonText}\n\n")
-	if(jsonText = "")
-		do dbg@print("!!!\n\n")
-	end if
-	try
-		ret \json@makeJsonT(jsonText)
-	catch
-		do wnd@msgBox(@wndMain, "不正なデータ", "eroor", %info, %ok)
-	end try
-end func
-func getTextByURL(url: []char): []char
-	var http: net@Http :: net@makeHttp(url, false, null)
-	;正常取得できるとhttpが開放されるのでバッファが必要
-	var text: []char
-	while(text =& null, skip)
-		do lib@sleep(100)
-		do text :: http.get()
-	end while
-	ret text
-end func
-
-enum McVersion
-	v1_13
-	v1_12
-end enum
-
-func makePlayerData(name: []char): @PlayerData
-	var pl: @PlayerData :: #@PlayerData
-	do pl.makeByName(name)
-	ret pl
-end func
-func makePlayerDataByCmd(cmd: []char, ver: @McVersion): @PlayerData
-	var pl: @PlayerData :: #@PlayerData
-	do pl.makeByCmd(cmd, ver)
-	ret pl
-end func
-class PlayerData()
-	+var skinURL: []char
-	+var userName: []char
-	+var userUUID: []char
-	*func ctor()
-		do me.skinURL :: ""
-		do me.userName :: ""
-		do me.userUUID :: ""
-	end func
-	+func makeByName(name: []char)
-		do me.userName :: name
-		do me.getUUIDbyName()
-		do me.getSkinURLbyUUID()
-	end func
-	+func makeByCmd(cmd: []char, ver: @McVersion)
-		var cmdJson: []char
-		var json: \json@Json
-		var jsonName: \json@Json
-		var jsonUUID: \json@Json
-		var jsonBase64: \json@Json
-		switch(ver)
-		case %v1_13
-			do cmdJson :: regex@makeRegex("^.*?{").replace(cmd, "{", false)
-			;普通は無いが末尾にオプションがついた場合
-			do cmdJson :: regex@makeRegex("}[^}] * $").replace(cmdJson, "}", false)
-			;力技でcmdJsonのタグに""をつける
-			do cmdJson :: regex@makeRegex("(Owner)\\s*:").replace(cmdJson, "\"$1\":", true)
-			do cmdJson :: regex@makeRegex("(Id)\\s*:").replace(cmdJson, "\"$1\":", true)
-			do cmdJson :: regex@makeRegex("(Properties)\\s*:").replace(cmdJson, "\"$1\":", true)
-			do cmdJson :: regex@makeRegex("(textures)\\s*:").replace(cmdJson, "\"$1\":", true)
-			do cmdJson :: regex@makeRegex("(Value)\\s*:").replace(cmdJson, "\"$1\":", true)
-			do cmdJson :: regex@makeRegex("(Name)\\s*:").replace(cmdJson, "\"$1\":", true)
-		end switch
-		;do dbg@print("\{cmdJson}\n")
-		do json :: \json@makeJsonT(cmdJson)
-		do jsonName :: json.at("Owner/Name")
-		do jsonUUID :: json.at("Owner/Id")
-		do jsonBase64 :: json.at("Owner/Properties/textures/0/Value")
-		if(jsonBase64.type() = %jstr)
-			do me.getURLbyBase64(jsonBase64.toStr())
-			if(jsonName.type() = %jstr & jsonUUID.type() = %jstr)
-				do me.userName :: jsonName.toStr()
-				do me.userUUID :: jsonUUID.toStr()
-			end if
-		end if
-		;コマンドの解析に失敗
-	end func
-	func getUUIDbyName()
-		var json: \json@Json
-		var jsonUUID: \json@Json
-		do json :: @getJson("https://api.mojang.com/users/profiles/minecraft/", me.userName)
-		do jsonUUID :: json.at("id")
-		do me.userUUID :: jsonUUID.toStr()
-	end func
-	func getSkinURLbyUUID()
-		var json: \json@Json
-		var jsonBase64: \json@Json
-		do json :: @getJson("https://sessionserver.mojang.com/session/minecraft/profile/", me.userUUID)
-		do jsonBase64 :: json.at("properties/0/value")
-		do me.getURLbyBase64(jsonBase64.toStr())
-	end func
-	func getURLbyBase64(base64: []char)
-		var json: \json@Json
-		var jsonURL: \json@Json
-		;do dbg@print("\{base64Json}\n\n")
-		do json :: \json@makeJsonT(\base64@dec(base64))
-		do jsonURL :: json.at("textures/SKIN/url")
-		do me.skinURL :: jsonURL.toStr()
-	end func
-end class
-func makeHeadData(playerData: @PlayerData): @HeadData
-	var head: @HeadData :: #@HeadData
-	do head.import(playerData)
-	ret head
-end func
-class HeadData()
-	+var skinURL: []char
-	+var uuid: []char
-	+var name: []char
-	+var comment: []char
-	*func ctor()
-		do me.skinURL :: ""
-		do me.uuid :: ""
-		do me.name :: ""
-		do me.comment :: ""
-	end func
-	+func clear()
-		do me.skinURL :: ""
-		do me.uuid :: ""
-		do me.name :: ""
-		do me.comment :: ""
-	end func
-	+func generateUUID()
-		do me.uuid :: lib@rndUuid()
-	end func
-	+func copy(head: @HeadData)
-		do me.skinURL :: head.skinURL
-		do me.uuid :: head.uuid
-		do me.name :: head.name
-		do me.comment :: head.comment
-	end func
-	+func show()
-		do dbg@print("[head]name:\{me.name}\n")
-		do dbg@print("[head]uuid:\{me.uuid}\n")
-		do dbg@print("[head]skinURL:\{me.skinURL}\n")
-		do dbg@print("[head]comment:\{me.comment}\n")
-	end func
-	+func import(playerData: @PlayerData)
-		do me.skinURL :: playerData.skinURL
-	end func
-	func makeBase64(res: &bool): []char
-		if(^(me.skinURL) = 0)
-			do res :: false
-			ret ""
-		else
-			do res :: true
-		end if
-		var jsonUrl: \json@JsonString :: #\json@JsonString
-		var jsonSkin: \json@JsonObject :: #\json@JsonObject
-		var jsonTex: \json@JsonObject :: #\json@JsonObject
-		var jsonRoot: \json@JsonObject :: #\json@JsonObject
-		do jsonUrl.setValue(me.skinURL)
-		do jsonSkin.add("url", jsonUrl)
-		do jsonTex.add("SKIN", jsonSkin)
-		do jsonRoot.add("textures", jsonTex)
-		ret \base64@enc(jsonRoot.dump())
-	end func
-	+func makeGiveCmd(ver: @McVersion, res: &bool): []char
-		var command: []char :: ""
-		var resBase64: bool :: true
-		if(^(me.uuid) = 0)
-			do res :: false
-			ret command
-		end if
-		var base64Json: []char :: me.makeBase64(&resBase64)
-		if(!resBase64)
-			do res :: false
-			ret command
-		end if
-		switch(ver)
-		case %v1_13
-			do command :~ "/give @p minecraft:player_head{"
-			if(^(me.name) <> 0)
-				do command :~ "display:{Name:\" {\\\"text\\\":\\\""
-				do command :~ me.name
-				do command :~ "\\\"}\"},"
-			end if
-			do command :~ "SkullOwner:{Id:\""
-			do command :~ me.uuid
-			do command :~ "\",Properties:{textures:[{Value:\""
-			do command :~ base64Json
-			do command :~ "\"}]}}} 1"
-		end switch
-		do res :: true
-		ret command
-	end func
-	+func makeJsonObj(): \json@JsonObject
-		var jsonRoot: \json@JsonObject :: #\json@JsonObject
-		var jsonName: \json@JsonString :: #\json@JsonString
-		var jsonURL: \json@JsonString :: #\json@JsonString
-		var jsonUUID: \json@JsonString :: #\json@JsonString
-		var jsonComment: \json@JsonString :: #\json@JsonString
-		do jsonName.setValue(me.name)
-		do jsonURL.setValue(me.skinURL)
-		do jsonUUID.setValue(me.uuid)
-		do jsonComment.setValue(me.comment)
-		do jsonRoot.add("name", jsonName)
-		do jsonRoot.add("skinURL", jsonURL)
-		do jsonRoot.add("uuid", jsonUUID)
-		do jsonRoot.add("comment", jsonComment)
-		ret jsonRoot
-	end func
-	+func loadJsonObj(json: \json@JsonObject)
-		do @jsonObjToString(json, "name", &me.name)
-		do @jsonObjToString(json, "skinURL", &me.skinURL)
-		do @jsonObjToString(json, "uuid", &me.uuid)
-		do @jsonObjToString(json, "comment", &me.comment)
-	end func
-end class
-func jsonObjToString(json: \json@Json, path: []char, string: &[]char): bool
-	var jsonStr: \json@Json :: #\json@Json
-	do jsonStr :: json.at(path)
-	if(jsonStr.type() = %jstr)
-		do string :: jsonStr.toStr()
-		ret true
-	else
-		ret false
-	end if
-end func
