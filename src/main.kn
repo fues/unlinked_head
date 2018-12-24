@@ -75,10 +75,10 @@ func main()
 	func pressKeyWnd(key: wnd@Key, sc: wnd@ShiftCtrl): bool
 		if(key = %s)
 			if(sc = (%ctrl $ wnd@ShiftCtrl).or(%shift $ wnd@ShiftCtrl))
-				do fileSaveAs()
+				do saveAsCmd()
 				ret true
 			elif(sc = %ctrl)
-				do fileSave()
+				do saveCmd()
 				ret true
 			end if
 		end if
@@ -89,9 +89,9 @@ func main()
 		case %newFile
 			do flash()
 		case %save
-			do fileSave()
+			do saveCmd()
 		case %saveAs
-			do fileSaveAs()
+			do saveAsCmd()
 		case %open
 			do loadListFileDialog()
 		case %dbug
@@ -426,14 +426,14 @@ func main()
 			do @wndMain.setText("* " ~ file@fileName(@listFilePath))
 		end if
 	end func
-	func fileSave()
+	func saveCmd()
 		if(@listFilePath = @listFilePathDefault)
 			do saveListFileDialog()
 		else
 			do saveListFile(@listFilePath)
 		end if
 	end func
-	func fileSaveAs()
+	func saveAsCmd()
 		do saveListFileDialog()
 	end func
 end func
