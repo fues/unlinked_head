@@ -109,6 +109,7 @@ func main()
 	end func
 	func pushHeadlistAdd(btn: wnd@Btn)
 		do @headListCursor :+ 1
+		do @headList.head()
 		if(@dataList.listHead.len() = @headListCursor)
 			do @dataList.listHead.add("")
 			do @headList.add(#\player@HeadData)
@@ -124,6 +125,7 @@ func main()
 	end func
 	func pushHeadlistCopy(btn: wnd@Btn)
 		do @headListCursor :+ 1
+		do @headList.head()
 		if(@dataList.listHead.len() = @headListCursor)
 			do @dataList.listHead.add("")
 			do @headList.add(#\player@HeadData)
