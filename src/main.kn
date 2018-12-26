@@ -87,7 +87,7 @@ func main()
 	func pushMenu(wnd: wnd@WndBase, id: int)
 		switch(id $ @MenuId)
 		case %newFile
-			do flash()
+			do flash(false)
 		case %save
 			do saveCmd()
 		case %saveAs
@@ -122,6 +122,7 @@ func main()
 		do loadHead()
 		do showHeadDataCtrl(true)
 		do applyListName()
+		do fileSaved(false)
 	end func
 	func pushHeadlistCopy(btn: wnd@Btn)
 		do @headListCursor :+ 1
@@ -140,8 +141,13 @@ func main()
 		do @head.copy(@headList.getOffset(@headListCursor - 1))
 		do showHeadDataCtrl(true)
 		do applyListName()
+		do fileSaved(false)
 	end func
 	func pushHeadListDel(btn: wnd@Btn)
+		if(wnd@msgBox(@wndMain, "アイテムを削除しますか?", "確認", %question, %okCancel) = %cancel)
+			ret
+		end if
+		;最後の1つだった場合内容をクリアする
 		if(@headListCursor = 0 & @dataList.listHead.len() = 1)
 			do @head.clear()
 			do applyListName()
@@ -160,6 +166,7 @@ func main()
 		end if
 		do loadHead()
 		do showHeadDataCtrl(true)
+		do fileSaved(false)
 	end func
 	func selectHeadList(li: wnd@List)
 		var newCursor: int :: @dataList.listHead.getSel()
@@ -233,21 +240,19 @@ func main()
 	end func
 	func closeWnd(wnd: wnd@WndBase): bool
 		var res: bool :: true
-		if(!@fileSaved)
-			var result: wnd@MsgBoxResult :: wnd@msgBox(@wndMain, "変更を破棄しますか？", "未保存のファイル", %warn, %okCancel)
-			switch(result)
-			case %ok
-			case %cancel
-				do res :: false
-			end switch
-		end if
-		if(res = true)
+		if(checkFileSaved())
+			do res :: true
 			do saveSettingFile(@settingFilePath)
+		else
+			do res :: false
 		end if
 		ret res
 	end func
 	;イベントハンドラここまで
-	func flash()
+	func flash(force: bool)
+		if(!force & !checkFileSaved())
+			ret
+		end if
 		;初期化
 		do @listFilePath :: @listFilePathDefault
 		do @headList :: #list<\player@HeadData>
@@ -379,7 +384,7 @@ func main()
 			if(jsonHeads.type() = %jary)
 				var jsonHeadsAry: \json@JsonArray :: jsonHeads $ \json@JsonArray
 				var listlen: int :: jsonHeadsAry.len()
-				do flash()
+				do flash(true)
 				if(listlen < 1)
 					throw 0
 				end if
@@ -406,6 +411,9 @@ func main()
 		ret true
 	end func
 	func loadListFileDialog()
+		if(!checkFileSaved())
+			ret
+		end if
 		var filePath: []char
 		do filePath :: wnd@openFileDialog(@wndMain, ["設定jsonファイル(*.mch.json)", "*.mch.json"], 0)
 		if(filePath <>& null)
@@ -427,6 +435,19 @@ func main()
 			do @fileSaved :: false
 			do @wndMain.setText("* " ~ file@fileName(@listFilePath))
 		end if
+	end func
+	func checkFileSaved(): bool
+		;処理を中止する場合はをfalse返す
+		;問題無い場合はtrueを返す
+		if(!@fileSaved)
+			var result: wnd@MsgBoxResult :: wnd@msgBox(@wndMain, "変更を破棄しますか？", "未保存のファイル", %warn, %okCancel)
+			if(result = %ok)
+				ret true
+			else
+				ret false
+			end if
+		end if
+		ret true
 	end func
 	func saveCmd()
 		if(@listFilePath = @listFilePathDefault)
